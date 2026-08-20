@@ -2689,8 +2689,18 @@ def switch_model(agent, new_model, new_provider, api_key='', base_url='', api_mo
         agent.provider = new_provider
         agent.requested_provider = new_provider
         # Re-read reasoning_echo from config so the flag reflects the new
-        # primary model's setting (see _reasoning_echo_opt_in).
-        agent._reasoning_echo_flag = agent._read_reasoning_echo_from_config()
+        # primary model's setting (see _reasoning_echo_opt_in). Best-effort:
+        # a missing method (e.g. on a SimpleNamespace stub used by tests) or
+        # a transient config-load failure must NOT roll back the entire swap
+        # — the user already validated the new provider via model_switch,
+        # and the reasoning_echo flag is just a per-model hint that defaults
+        # safely to False. Regression introduced when commit 663fa68cd4
+        # refactored the original try/except (73243b0d2e) into a bare
+        # method call, removing the defensive fallback.
+        try:
+            agent._reasoning_echo_flag = agent._read_reasoning_echo_from_config()
+        except Exception:
+            agent._reasoning_echo_flag = False
         # Use the new base_url when provided. When it's empty AND the
         # provider is actually changing, do NOT fall back to the current
         # (old provider's) URL — that silently pairs the new provider label
