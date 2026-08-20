@@ -77,6 +77,13 @@ jobs:
       # Sparse-checkout alone keeps the working tree to a single file.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          # fetch-depth: 0 is REQUIRED here. With the default fetch-depth: 1
+          # (shallow), `git fetch --tags` is incompatible with the shallow
+          # history and `git tag -l 'v*'` returns empty. That breaks
+          # scripts/sandbox/pick-release-tags.sh which then aborts the
+          # whole install-e2e matrix with "no release tags found".
+          # fetch-tags: true alone is not enough on actions/checkout v6.0.2.
+          fetch-depth: 0
           fetch-tags: true
           sparse-checkout: scripts/sandbox/pick-release-tags.sh
           sparse-checkout-cone-mode: false
