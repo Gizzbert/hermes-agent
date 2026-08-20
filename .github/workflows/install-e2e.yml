@@ -64,11 +64,19 @@ jobs:
       tags: ${{ steps.pick.outputs.tags }}
     steps:
       # This job only reads tag names and runs one script, so take the cheap
-      # checkout: no blobs (filter), no other files (sparse), but DO fetch tags
-      # -- they are the whole input, and the default shallow checkout has none.
+      # checkout: just the one file we actually run (sparse-checkout), with
+      # tags fetched so the tag-pick script can list them.
+      #
+      # We deliberately do NOT enable the blob partial-clone filter here.
+      # Combined with sparse-checkout and `fetch-tags: true`, it makes
+      # actions/checkout v6 issue a fetch line that contains both
+      # `--no-tags` and `+refs/tags/*:refs/tags/*`. In that combination the
+      # tag refspec is ignored, `git tag -l 'v*'` returns empty, and
+      # scripts/sandbox/pick-release-tags.sh fails with
+      # "no release tags found" -- aborting the whole install-e2e matrix.
+      # Sparse-checkout alone keeps the working tree to a single file.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          filter: blob:none
           fetch-tags: true
           sparse-checkout: scripts/sandbox/pick-release-tags.sh
           sparse-checkout-cone-mode: false
