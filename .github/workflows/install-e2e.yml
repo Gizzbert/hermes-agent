@@ -67,14 +67,26 @@ jobs:
       # checkout: just the one file we actually run (sparse-checkout), with
       # tags fetched so the tag-pick script can list them.
       #
-      # We deliberately do NOT enable the blob partial-clone filter here.
-      # Combined with sparse-checkout and `fetch-tags: true`, it makes
-      # actions/checkout v6 issue a fetch line that contains both
-      # `--no-tags` and `+refs/tags/*:refs/tags/*`. In that combination the
-      # tag refspec is ignored, `git tag -l 'v*'` returns empty, and
-      # scripts/sandbox/pick-release-tags.sh fails with
-      # "no release tags found" -- aborting the whole install-e2e matrix.
-      # Sparse-checkout alone keeps the working tree to a single file.
+      # Why an explicit `git fetch --tags` is also needed below:
+      #
+      #   actions/checkout v6.0.2 unconditionally appends `--no-tags` to its
+      #   `git fetch` invocation (see src/git-command-manager.ts in the action
+      #   source). On git <2.48 the `+refs/tags/*:refs/tags/*` refspec that
+      #   fetch-tags: true also adds overrides --no-tags, so tags are still
+      #   pulled. On git >=2.48 (current ubuntu-latest runner image since
+      #   2025-01-13), --no-tags on the command line takes precedence over
+      #   the refspec, so no tags reach the local repo. `git tag -l 'v*'`
+      #   then returns empty and scripts/sandbox/pick-release-tags.sh aborts
+      #   the whole install-e2e matrix with "no release tags found". The
+      #   `fetch --tags` step after checkout re-fetches tags explicitly and
+      #   sidesteps the bug. This is the workaround recommended in
+      #   actions/checkout#2041 and applied by several projects until the
+      #   action ships a real fix. Verified against actions/checkout
+      #   de0fac2e4500dabe0009e67214ff5f5447ce83dd (v6.0.2) on 2026-09-27.
+      #
+      # fetch-depth: 0 is also required: with the default fetch-depth: 1
+      # (shallow), `git fetch --tags` is incompatible with the shallow
+      # history and the tag list is empty even before the v6.0.2 bug bites.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           # fetch-depth: 0 is REQUIRED here. With the default fetch-depth: 1
@@ -90,6 +102,11 @@ jobs:
       - id: pick
         run: |
           set -euo pipefail
+          # actions/checkout v6.0.2 + git >=2.48 workaround: re-fetch tags
+          # explicitly. The action's `--no-tags` flag suppresses tag fetching
+          # even when fetch-tags: true + the +refs/tags/* refspec are set;
+          # this command overrides that. See the comment above.
+          git fetch --tags --prune --no-recurse-submodules origin '+refs/tags/*:refs/tags/*'
           tags="$(scripts/sandbox/pick-release-tags.sh --count '${{ inputs.tag-count || 5 }}')"
           echo "Testing updates from: $tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
