@@ -53,6 +53,27 @@ def test_starlette_server_pins_and_lock_exclude_cve_2026_48710():
     assert versions and all(version >= floor for version in versions)
 
 
+def test_brotlicffi_pin_and_lock_exclude_ghsa_9v8h_qqgm_4m35():
+    # GHSA-9v8h-qqgm-4m35: out-of-bounds write in the Brotli decoder (Node2Shell),
+    # affecting Google Brotli 1.0.3 through 1.2.0. The fixed boundary is independent
+    # of today's exact pin.
+    floor = Version("1.2.1.0")
+    metadata = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    lock = tomllib.loads((REPO_ROOT / "uv.lock").read_text(encoding="utf-8"))
+    found = set()
+    for extra, specs in metadata["project"]["optional-dependencies"].items():
+        for requirement in map(Requirement, specs):
+            if requirement.name != "brotlicffi":
+                continue
+            pins = list(requirement.specifier)
+            assert len(pins) == 1 and pins[0].operator == "==", (extra, requirement)
+            assert Version(pins[0].version) >= floor, (extra, requirement)
+            found.add(extra)
+    assert {"messaging"} <= found
+    versions = [Version(row["version"]) for row in lock["package"] if row["name"] == "brotlicffi"]
+    assert versions and all(version >= floor for version in versions), versions
+
+
 CA_TRUST_PACKAGES = {"certifi"}
 
 
